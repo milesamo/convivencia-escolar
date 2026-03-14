@@ -2,7 +2,10 @@ streamlit
 pandas
 openpyxl
 streamlit-drawable-canvas
-supabase==2.4.0
+supabase
 reportlab
 pillow
 httpx
+
+
+
