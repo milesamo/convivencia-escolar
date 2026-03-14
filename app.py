@@ -218,18 +218,14 @@ if st.button("Registrar falta", type="primary"):
 
     }
 
+    
     try:
+        response = supabase.table("reportes").insert(data).execute()
+        st.write(response)
+       st.success("Falta registrada correctamente")
 
-        supabase.table("reportes").insert(data).execute()
-
-        st.success("Falta registrada correctamente")
-
-        st.cache_data.clear()
-        st.rerun()
-
-    except:
-
-        st.error("Error guardando en Supabase")
+    except Exception as e:
+        st.error(e)
 
 # ----------------------------
 # GENERAR PDF
