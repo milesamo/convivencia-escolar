@@ -14,8 +14,8 @@ from datetime import date
 # CONFIGURACION SUPABASE
 # -----------------------------
 
-url = "sb_publishable_AaFkMAv5YaK2AfcZkL5cDg_JgqvWABw"
-key = "https://sbxbxksbztvzebybtzxj.supabase.co"
+url = "https://sbxbxksbztvzebybtzxj.supabase.co"
+key = "sb_publishable_AaFkMAv5YaK2AfcZkL5cDg_JgqvWABw"
 
 supabase = create_client(url, key)
 
