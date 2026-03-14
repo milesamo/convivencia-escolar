@@ -4,6 +4,31 @@ import os
 from datetime import datetime
 from streamlit_drawable_canvas import st_canvas
 
+import streamlit as st
+from supabase import create_client
+
+# conexión a la base de datos
+url = "https://sbxbxksbztvzebybtzxj.supabase.co"
+key = "TU_API_KEY"
+supabase = create_client(url, key)
+
+st.title("Sistema de Convivencia Escolar")
+
+estudiante = st.text_input("Nombre del estudiante")
+grado = st.text_input("Grado")
+fecha = st.date_input("Fecha")
+
+if st.button("Guardar reporte"):
+    data = {
+        "estudiante": estudiante,
+        "grado": grado,
+        "fecha": str(fecha)
+    }
+
+    supabase.table("reportes").insert(data).execute()
+
+    st.success("Reporte guardado")
+
 # PDF
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
