@@ -1,5 +1,5 @@
 import streamlit as st
-from supabase import create_client
+from supabase import create_client, Client
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from reportlab.platypus import Table, TableStyle
@@ -14,10 +14,15 @@ from datetime import date
 # CONFIGURACION SUPABASE
 # ----------------------------------
 
-url = "https://sbxbxksbztvzebybtzxj.supabase.co"
-key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNieGJ4a3NienR2emVieXRienhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0NDQ1MzUsImV4cCI6MjA4OTAyMDUzNX0.q9Oq5nHrB5DFemGI6ZqCNltD2T1dlPsfMCUc-xki6Ko"
+SUPABASE_URL = "https://sbxbxksbztvzebybtzxj.supabase.co"
 
-supabase = create_client(url, key)
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNieGJ4a3NienR2emVieXRienhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0NDQ1MzUsImV4cCI6MjA4OTAyMDUzNX0.q9Oq5nHrB5DFemGI6ZqCNltD2T1dlPsfMCUc-xki6Ko"
+
+try:
+    supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+except Exception as e:
+    st.error("No se pudo conectar con Supabase")
+    st.stop()
 
 st.title("Sistema de Convivencia Escolar")
 
@@ -26,13 +31,14 @@ st.title("Sistema de Convivencia Escolar")
 # ----------------------------------
 
 try:
-    estudiantes = supabase.table("estudiantes").select("*").execute().data
+    response = supabase.table("estudiantes").select("*").execute()
+    estudiantes = response.data
 except:
-    st.error("Error conectando con Supabase")
+    st.error("Error leyendo tabla estudiantes")
     st.stop()
 
 if not estudiantes:
-    st.error("No hay estudiantes registrados")
+    st.warning("No hay estudiantes registrados")
     st.stop()
 
 lista_estudiantes = {
@@ -51,10 +57,11 @@ estudiante_id = lista_estudiantes[estudiante_nombre]
 # CARGAR FALTAS
 # ----------------------------------
 
-faltas = supabase.table("faltas").select("*").execute().data
+response_faltas = supabase.table("faltas").select("*").execute()
+faltas = response_faltas.data
 
 if not faltas:
-    st.error("No hay faltas registradas")
+    st.warning("No hay faltas registradas")
     st.stop()
 
 lista_faltas = {
@@ -108,17 +115,22 @@ if canvas_result.image_data is not None:
 
 if st.button("Guardar reporte"):
 
-    supabase.table("reportes").insert({
+    try:
 
-        "estudiante_id": estudiante_id,
-        "falta_id": falta_id,
-        "fecha": str(date.today()),
-        "observacion": observacion,
-        "firma_estudiante": firma_base64
+        supabase.table("reportes").insert({
 
-    }).execute()
+            "estudiante_id": estudiante_id,
+            "falta_id": falta_id,
+            "fecha": str(date.today()),
+            "observacion": observacion,
+            "firma_estudiante": firma_base64
 
-    st.success("Reporte guardado correctamente")
+        }).execute()
+
+        st.success("Reporte guardado correctamente")
+
+    except:
+        st.error("Error guardando el reporte")
 
 # ----------------------------------
 # GENERAR PDF
@@ -137,8 +149,6 @@ def generar_pdf():
 
     width, height = letter
 
-    # TITULO
-
     pdf.setFont("Helvetica-Bold", 14)
     pdf.drawString(120, height - 60,
                    "INSTITUCION EDUCATIVA CIUDAD LA HORMIGA")
@@ -147,19 +157,13 @@ def generar_pdf():
     pdf.drawString(180, height - 90,
                    "REPORTE DE CONVIVENCIA ESCOLAR")
 
-    # DATOS ESTUDIANTE
-
     pdf.setFont("Helvetica", 11)
 
     pdf.drawString(50, height - 130,
                    f"Estudiante: {estudiante_nombre}")
 
     pdf.drawString(50, height - 150,
-                   f"Fecha del reporte: {date.today()}")
-
-    # ----------------------------------
-    # TABLA HISTORIAL
-    # ----------------------------------
+                   f"Fecha: {date.today()}")
 
     data = [["Fecha", "Tipo", "Descripción", "Observación"]]
 
@@ -180,50 +184,27 @@ def generar_pdf():
     table = Table(data, colWidths=[70, 70, 200, 180])
 
     style = TableStyle([
-
         ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
-
         ("GRID", (0, 0), (-1, -1), 1, colors.black),
-
         ("FONTSIZE", (0, 0), (-1, -1), 9)
-
     ])
 
     table.setStyle(style)
 
     table.wrapOn(pdf, width, height)
-
     table.drawOn(pdf, 50, height - 380)
-
-    # ----------------------------------
-    # FIRMA ESTUDIANTE
-    # ----------------------------------
 
     if len(historial) > 0 and historial[0].get("firma_estudiante"):
 
-        firma_bytes = base64.b64decode(
-            historial[0]["firma_estudiante"]
-        )
+        firma_bytes = base64.b64decode(historial[0]["firma_estudiante"])
 
         with open("firma_temp.png", "wb") as f:
             f.write(firma_bytes)
 
-        pdf.drawImage(
-            "firma_temp.png",
-            120,
-            200,
-            width=200,
-            height=60
-        )
-
+        pdf.drawImage("firma_temp.png", 120, 200, width=200, height=60)
         pdf.drawString(170, 180, "Firma del estudiante")
 
-    # ----------------------------------
-    # FIRMA DOCENTE
-    # ----------------------------------
-
     pdf.line(360, 200, 520, 200)
-
     pdf.drawString(400, 180, "Firma del docente")
 
     pdf.save()
@@ -231,6 +212,7 @@ def generar_pdf():
     buffer.seek(0)
 
     return buffer
+
 
 # ----------------------------------
 # BOTON PDF
@@ -241,13 +223,8 @@ if st.button("Generar PDF"):
     pdf = generar_pdf()
 
     st.download_button(
-
         "Descargar reporte PDF",
-
         pdf,
-
         "reporte_convivencia.pdf",
-
         "application/pdf"
-
     )
