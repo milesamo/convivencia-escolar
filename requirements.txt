@@ -1,8 +1,7 @@
 streamlit
 pandas
-reportlab
-streamlit-drawable-canvas
-Pillow
 openpyxl
-streamlit
+streamlit-drawable-canvas
 supabase
+reportlab
+pillow
