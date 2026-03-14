@@ -1,316 +1,131 @@
 import streamlit as st
-import pandas as pd
-import os
-from datetime import datetime
-from streamlit_drawable_canvas import st_canvas
 from supabase import create_client
+from datetime import datetime
 
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.pagesizes import letter
-from reportlab.lib.units import cm
-from reportlab.lib import colors
+# -------------------------
+# CONFIGURACION STREAMLIT
+# -------------------------
 
-from PIL import Image as PILImage
+st.set_page_config(
+    page_title="Sistema de Convivencia Escolar",
+    page_icon="📘",
+    layout="wide"
+)
 
-# ----------------------------
-# SUPABASE
-# ----------------------------
+# -------------------------
+# CONEXION SUPABASE (SECRETS)
+# -------------------------
 
-SUPABASE_URL = "https://sbxbxksbztvzebybtzxj.supabase.co"
-SUPABASE_KEY = "sb_publishable_AaFkMAv5YaK2AfcZkL5cDg_JgqvWABw"
+SUPABASE_URL = st.secrets["SUPABASE_URL"]
+SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# ----------------------------
-# CONFIGURACION APP
-# ----------------------------
+# -------------------------
+# TITULO
+# -------------------------
 
-st.set_page_config(
-    page_title="Convivencia Escolar",
-    layout="centered"
-)
+st.title("INSTITUCIÓN EDUCATIVA CIUDAD LA HORMIGA")
+st.divider()
 
-# ----------------------------
-# ESTILO
-# ----------------------------
+# -------------------------
+# FUNCIONES
+# -------------------------
 
-st.markdown("""
-<style>
-
-.block-container{
-padding-top:3rem;
-padding-bottom:2rem;
-}
-
-button{
-height:55px;
-font-size:18px;
-border-radius:8px;
-}
-
-</style>
-""", unsafe_allow_html=True)
-
-# ----------------------------
-# CARPETAS
-# ----------------------------
-
-os.makedirs("firmas", exist_ok=True)
-os.makedirs("pdf", exist_ok=True)
-
-# ----------------------------
-# CARGAR DATOS
-# ----------------------------
-
-@st.cache_data
 def cargar_estudiantes():
-
-    df = pd.read_excel("estudiantes.xlsx")
-    df.columns = df.columns.str.lower().str.strip()
-
-    return df
-
-
-@st.cache_data
-def cargar_faltas():
-
-    df = pd.read_excel("faltas.xlsx")
-    df.columns = df.columns.str.lower().str.strip()
-
-    return df
+    try:
+        response = supabase.table("estudiantes").select("*").execute()
+        return response.data
+    except Exception as e:
+        st.error(f"Error cargando estudiantes: {e}")
+        return []
 
 
 def cargar_reportes():
-
     try:
-
-        res = supabase.table("reportes").select("*").execute()
-
-        if res.data:
-            return pd.DataFrame(res.data)
-        else:
-            return pd.DataFrame()
-
+        response = supabase.table("reportes").select("*").execute()
+        return response.data
     except Exception as e:
-
         st.error(f"Error cargando reportes: {e}")
-        return pd.DataFrame()
+        return []
 
 
-df_estudiantes = cargar_estudiantes()
-df_faltas = cargar_faltas()
-df_reportes = cargar_reportes()
+def guardar_reporte(estudiante, grado, descripcion):
 
-# ----------------------------
-# ENCABEZADO
-# ----------------------------
-
-col1,col2 = st.columns([1,5])
-
-with col1:
-    st.image("escudo_iech.png", width=45)
-
-with col2:
-    st.markdown("""
-    <div style="font-size:20px;font-weight:700">
-    INSTITUCION EDUCATIVA CIUDAD LA HORMIGA
-    </div>
-    """, unsafe_allow_html=True)
-
-st.divider()
-
-# ----------------------------
-# SELECCION ESTUDIANTE
-# ----------------------------
-
-st.subheader("Seleccionar estudiante")
-
-grados = sorted(df_estudiantes["grado"].unique())
-
-grado = st.selectbox("Grado", grados)
-
-estudiantes = df_estudiantes[df_estudiantes["grado"] == grado]
-
-estudiante = st.selectbox("Estudiante", estudiantes["estudiante"])
-
-# ----------------------------
-# HISTORIAL
-# ----------------------------
-
-if not df_reportes.empty:
-
-    historial = df_reportes[df_reportes["estudiante"] == estudiante]
-
-    if len(historial) > 0:
-
-        st.warning(f"⚠ Este estudiante tiene {len(historial)} faltas registradas")
-
-# ----------------------------
-# REGISTRAR FALTA
-# ----------------------------
-
-st.subheader("Registrar falta")
-
-col1,col2 = st.columns(2)
-
-with col1:
-    docente = st.text_input("Docente")
-
-with col2:
-    area = st.text_input("Área")
-
-tipo = st.selectbox(
-    "Tipo de falta",
-    df_faltas["tipo"].unique()
-)
-
-faltas_tipo = df_faltas[df_faltas["tipo"] == tipo]
-
-descripcion = st.selectbox(
-    "Descripción",
-    faltas_tipo["descripcion"]
-)
-
-observaciones = st.text_area("Observaciones")
-
-# ----------------------------
-# FIRMA
-# ----------------------------
-
-st.subheader("Firma del estudiante")
-
-canvas = st_canvas(
-    stroke_width=2,
-    stroke_color="black",
-    background_color="white",
-    height=170,
-    width=420,
-    drawing_mode="freedraw",
-    key="canvas"
-)
-
-# ----------------------------
-# GUARDAR
-# ----------------------------
-
-if st.button("Registrar falta", type="primary"):
-
-    firma_path = ""
-
-    if canvas.image_data is not None:
-
-        firma_path = f"firmas/{estudiante.replace(' ','_')}.png"
-
-        img = PILImage.fromarray(canvas.image_data.astype("uint8"))
-        img.save(firma_path)
-
-    data = {
-
-        "fecha": datetime.now().strftime("%Y-%m-%d"),
-        "grado": grado,
+    datos = {
         "estudiante": estudiante,
-        "docente": docente,
-        "area": area,
-        "tipo": tipo,
+        "grado": grado,
         "descripcion": descripcion,
-        "observaciones": observaciones,
-        "firma": firma_path
-
+        "fecha": datetime.now().strftime("%Y-%m-%d")
     }
 
     try:
-
-        response = supabase.table("reportes").insert(data).execute()
-
-        st.success("Falta registrada correctamente")
-
+        supabase.table("reportes").insert(datos).execute()
+        st.success("Reporte guardado correctamente")
     except Exception as e:
+        st.error(f"Error guardando reporte: {e}")
 
-        st.error(f"Error guardando en Supabase: {e}")
 
-# ----------------------------
-# GENERAR PDF
-# ----------------------------
+# -------------------------
+# CARGAR DATOS
+# -------------------------
 
-def generar_pdf(estudiante, grado, historial):
+estudiantes = cargar_estudiantes()
 
-    archivo = f"pdf/{estudiante.replace(' ','_')}.pdf"
+# -------------------------
+# FORMULARIO REPORTE
+# -------------------------
 
-    styles = getSampleStyleSheet()
-    style_text = ParagraphStyle('texto',fontSize=9,leading=11)
+st.header("Registrar reporte")
 
-    elementos = []
+if len(estudiantes) == 0:
 
-    encabezado = Table([
-        [
-            Image("escudo_iech.png",2.5*cm,2.5*cm),
-            Paragraph(
-                "<b>INSTITUCION EDUCATIVA CIUDAD LA HORMIGA</b>",
-                styles["Heading2"]
-            )
-        ]
-    ], colWidths=[3*cm,14*cm])
+    st.warning("No hay estudiantes en la base de datos")
 
-    elementos.append(encabezado)
+else:
 
-    elementos.append(Spacer(1,20))
+    lista_estudiantes = [e["nombre"] for e in estudiantes]
+    lista_grados = sorted(list(set([e["grado"] for e in estudiantes])))
 
-    info = [
-        ["Estudiante:", estudiante],
-        ["Grado:", grado],
-        ["Total faltas:", str(len(historial))]
-    ]
+    col1, col2 = st.columns(2)
 
-    tabla_info = Table(info, colWidths=[120,300])
-    elementos.append(tabla_info)
+    with col1:
+        grado = st.selectbox("Grado", lista_grados)
 
-    elementos.append(Spacer(1,20))
+    with col2:
+        estudiante = st.selectbox("Estudiante", lista_estudiantes)
 
-    data = [["Fecha","Docente","Área","Tipo","Descripción","Observaciones"]]
+    descripcion = st.text_area(
+        "Descripción del reporte",
+        height=150
+    )
 
-    for _, r in historial.iterrows():
+    if st.button("Guardar reporte"):
 
-        data.append([
-            Paragraph(str(r["fecha"]),style_text),
-            Paragraph(str(r["docente"]),style_text),
-            Paragraph(str(r["area"]),style_text),
-            Paragraph(str(r["tipo"]),style_text),
-            Paragraph(str(r["descripcion"]),style_text),
-            Paragraph(str(r["observaciones"]),style_text)
-        ])
+        if descripcion.strip() == "":
+            st.warning("Debe escribir una descripción")
+        else:
+            guardar_reporte(estudiante, grado, descripcion)
 
-    tabla = Table(data,colWidths=[55,90,70,70,150,140])
+# -------------------------
+# HISTORIAL
+# -------------------------
 
-    tabla.setStyle(TableStyle([
-        ("GRID",(0,0),(-1,-1),0.5,colors.grey),
-        ("BACKGROUND",(0,0),(-1,0),colors.black),
-        ("TEXTCOLOR",(0,0),(-1,0),colors.white)
-    ]))
+st.divider()
+st.header("Historial de reportes")
 
-    elementos.append(tabla)
+reportes = cargar_reportes()
 
-    doc = SimpleDocTemplate(archivo,pagesize=letter)
+if len(reportes) == 0:
 
-    doc.build(elementos)
+    st.info("No hay reportes registrados")
 
-    return archivo
+else:
 
-# ----------------------------
-# BOTON PDF
-# ----------------------------
+    for r in reportes:
 
-if st.button("Generar PDF"):
+        with st.expander(f"{r['fecha']} - {r['estudiante']}"):
 
-    historial = cargar_reportes()
-    historial = historial[historial["estudiante"] == estudiante]
-
-    archivo = generar_pdf(estudiante, grado, historial)
-
-    with open(archivo,"rb") as f:
-
-        st.download_button(
-            "Descargar PDF",
-            f,
-            file_name=os.path.basename(archivo)
-        )
+            st.write("**Grado:**", r["grado"])
+            st.write("**Descripción:**")
+            st.write(r["descripcion"])
