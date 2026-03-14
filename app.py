@@ -14,7 +14,7 @@ from reportlab.lib import colors
 from PIL import Image as PILImage
 
 # ----------------------------
-# CONFIGURACION SUPABASE
+# SUPABASE
 # ----------------------------
 
 url = "https://sbxbxksbztvzebybtzxj.supabase.co"
@@ -23,7 +23,7 @@ key = "sb_publishable_AaFkMAv5YaK2AfcZkL5cDg_JgqvWABw"
 supabase = create_client(url, key)
 
 # ----------------------------
-# CONFIGURACION APP
+# CONFIG APP
 # ----------------------------
 
 st.set_page_config(
@@ -32,7 +32,7 @@ st.set_page_config(
 )
 
 # ----------------------------
-# ESTILO MOVIL
+# ESTILO
 # ----------------------------
 
 st.markdown("""
@@ -41,18 +41,6 @@ st.markdown("""
 .block-container{
 padding-top:3rem;
 padding-bottom:2rem;
-}
-
-div[data-baseweb="select"]{
-font-size:18px;
-}
-
-input{
-font-size:18px !important;
-}
-
-textarea{
-font-size:18px !important;
 }
 
 button{
@@ -65,36 +53,44 @@ border-radius:8px;
 """, unsafe_allow_html=True)
 
 # ----------------------------
-# CREAR CARPETAS
+# CARPETAS
 # ----------------------------
 
 os.makedirs("firmas", exist_ok=True)
 os.makedirs("pdf", exist_ok=True)
 
 # ----------------------------
-# CARGAR BASES
+# CARGAR DATOS
 # ----------------------------
 
 @st.cache_data
 def cargar_estudiantes():
+
     df = pd.read_excel("estudiantes.xlsx")
     df.columns = df.columns.str.lower().str.strip()
+
     return df
 
 
 @st.cache_data
 def cargar_faltas():
+
     df = pd.read_excel("faltas.xlsx")
     df.columns = df.columns.str.lower().str.strip()
+
     return df
 
 
 def cargar_reportes():
 
     try:
+
         res = supabase.table("reportes").select("*").execute()
+
         return pd.DataFrame(res.data)
+
     except:
+
         return pd.DataFrame(columns=[
             "fecha","grado","estudiante",
             "docente","area","tipo",
@@ -117,11 +113,8 @@ with col1:
 
 with col2:
     st.markdown("""
-    <div style="font-size:18px;font-weight:600">
-    INSTITUCION EDUCATIVA
-    </div>
-    <div style="font-size:16px">
-    CIUDAD LA HORMIGA
+    <div style="font-size:20px;font-weight:700">
+    INSTITUCION EDUCATIVA CIUDAD LA HORMIGA
     </div>
     """, unsafe_allow_html=True)
 
@@ -149,9 +142,7 @@ historial = df_reportes[df_reportes["estudiante"] == estudiante]
 
 if len(historial) > 0:
 
-    st.warning(
-        f"⚠ Este estudiante tiene {len(historial)} faltas registradas"
-    )
+    st.warning(f"⚠ Este estudiante tiene {len(historial)} faltas registradas")
 
 # ----------------------------
 # REGISTRAR FALTA
@@ -198,7 +189,7 @@ canvas = st_canvas(
 )
 
 # ----------------------------
-# GUARDAR FALTA
+# GUARDAR
 # ----------------------------
 
 if st.button("Registrar falta", type="primary"):
@@ -209,9 +200,7 @@ if st.button("Registrar falta", type="primary"):
 
         firma_path = f"firmas/{estudiante.replace(' ','_')}.png"
 
-        img = PILImage.fromarray(
-            canvas.image_data.astype("uint8")
-        )
+        img = PILImage.fromarray(canvas.image_data.astype("uint8"))
 
         img.save(firma_path)
 
@@ -230,10 +219,16 @@ if st.button("Registrar falta", type="primary"):
     }
 
     try:
+
         supabase.table("reportes").insert(data).execute()
+
         st.success("Falta registrada correctamente")
 
+        st.cache_data.clear()
+        st.rerun()
+
     except:
+
         st.error("Error guardando en Supabase")
 
 # ----------------------------
@@ -246,11 +241,7 @@ def generar_pdf(estudiante, grado, historial):
 
     styles = getSampleStyleSheet()
 
-    style_text = ParagraphStyle(
-        'texto',
-        fontSize=9,
-        leading=11
-    )
+    style_text = ParagraphStyle('texto',fontSize=9,leading=11)
 
     elementos = []
 
@@ -293,53 +284,19 @@ def generar_pdf(estudiante, grado, historial):
             Paragraph(str(r["observaciones"]),style_text)
         ])
 
-    tabla = Table(
-        data,
-        colWidths=[55,90,70,70,150,140]
-    )
+    tabla = Table(data,colWidths=[55,90,70,70,150,140])
 
     tabla.setStyle(TableStyle([
 
         ("GRID",(0,0),(-1,-1),0.5,colors.grey),
         ("BACKGROUND",(0,0),(-1,0),colors.black),
-        ("TEXTCOLOR",(0,0),(-1,0),colors.white),
-        ("VALIGN",(0,0),(-1,-1),"TOP"),
-        ("LEFTPADDING",(0,0),(-1,-1),5),
-        ("RIGHTPADDING",(0,0),(-1,-1),5)
+        ("TEXTCOLOR",(0,0),(-1,0),colors.white)
 
     ]))
 
     elementos.append(tabla)
 
-    elementos.append(Spacer(1,40))
-
-    firma = historial["firma"].dropna().unique()
-
-    if len(firma) > 0 and os.path.exists(firma[0]):
-
-        elementos.append(
-            Paragraph("Firma del estudiante", styles["Normal"])
-        )
-
-        elementos.append(Spacer(1,10))
-
-        elementos.append(
-            Image(firma[0],5*cm,2*cm)
-        )
-
-    elementos.append(Spacer(1,40))
-
-    elementos.append(
-        Paragraph(
-            "Firma del docente _______________________________",
-            styles["Normal"]
-        )
-    )
-
-    doc = SimpleDocTemplate(
-        archivo,
-        pagesize=letter
-    )
+    doc = SimpleDocTemplate(archivo,pagesize=letter)
 
     doc.build(elementos)
 
@@ -350,6 +307,9 @@ def generar_pdf(estudiante, grado, historial):
 # ----------------------------
 
 if st.button("Generar PDF"):
+
+    historial = cargar_reportes()
+    historial = historial[historial["estudiante"] == estudiante]
 
     archivo = generar_pdf(estudiante, grado, historial)
 
