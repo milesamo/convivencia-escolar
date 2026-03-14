@@ -15,8 +15,7 @@ from datetime import date
 # ----------------------------------
 
 SUPABASE_URL = "https://sbxbxksbztvzebybtzxj.supabase.co"
-
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNieGJ4a3NienR2emVieXRienhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0NDQ1MzUsImV4cCI6MjA4OTAyMDUzNX0.q9Oq5nHrB5DFemGI6ZqCNltD2T1dlPsfMCUc-xki6Ko"
+SUPABASE_KEY = "sb_publishable_AaFkMAv5YaK2AfcZkL5cDg_JgqvWABw"
 
 try:
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
