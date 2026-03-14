@@ -17,13 +17,13 @@ from PIL import Image as PILImage
 # SUPABASE
 # ----------------------------
 
-url = "https://sbxbxksbztvzebybtzxj.supabase.co"
-key = "sb_publishable_AaFkMAv5YaK2AfcZkL5cDg_JgqvWABw"
+SUPABASE_URL = "https://sbxbxksbztvzebybtzxj.supabase.co"
+SUPABASE_KEY = "sb_publishable_AaFkMAv5YaK2AfcZkL5cDg_JgqvWABw"
 
-supabase = create_client(url, key)
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # ----------------------------
-# CONFIG APP
+# CONFIGURACION APP
 # ----------------------------
 
 st.set_page_config(
@@ -87,15 +87,15 @@ def cargar_reportes():
 
         res = supabase.table("reportes").select("*").execute()
 
-        return pd.DataFrame(res.data)
+        if res.data:
+            return pd.DataFrame(res.data)
+        else:
+            return pd.DataFrame()
 
-    except:
+    except Exception as e:
 
-        return pd.DataFrame(columns=[
-            "fecha","grado","estudiante",
-            "docente","area","tipo",
-            "descripcion","observaciones","firma"
-        ])
+        st.error(f"Error cargando reportes: {e}")
+        return pd.DataFrame()
 
 
 df_estudiantes = cargar_estudiantes()
@@ -138,11 +138,13 @@ estudiante = st.selectbox("Estudiante", estudiantes["estudiante"])
 # HISTORIAL
 # ----------------------------
 
-historial = df_reportes[df_reportes["estudiante"] == estudiante]
+if not df_reportes.empty:
 
-if len(historial) > 0:
+    historial = df_reportes[df_reportes["estudiante"] == estudiante]
 
-    st.warning(f"⚠ Este estudiante tiene {len(historial)} faltas registradas")
+    if len(historial) > 0:
+
+        st.warning(f"⚠ Este estudiante tiene {len(historial)} faltas registradas")
 
 # ----------------------------
 # REGISTRAR FALTA
@@ -201,7 +203,6 @@ if st.button("Registrar falta", type="primary"):
         firma_path = f"firmas/{estudiante.replace(' ','_')}.png"
 
         img = PILImage.fromarray(canvas.image_data.astype("uint8"))
-
         img.save(firma_path)
 
     data = {
@@ -218,14 +219,15 @@ if st.button("Registrar falta", type="primary"):
 
     }
 
-    
     try:
+
         response = supabase.table("reportes").insert(data).execute()
-        st.write(response)
-       st.success("Falta registrada correctamente")
+
+        st.success("Falta registrada correctamente")
 
     except Exception as e:
-        st.error(e)
+
+        st.error(f"Error guardando en Supabase: {e}")
 
 # ----------------------------
 # GENERAR PDF
@@ -236,7 +238,6 @@ def generar_pdf(estudiante, grado, historial):
     archivo = f"pdf/{estudiante.replace(' ','_')}.pdf"
 
     styles = getSampleStyleSheet()
-
     style_text = ParagraphStyle('texto',fontSize=9,leading=11)
 
     elementos = []
@@ -262,7 +263,6 @@ def generar_pdf(estudiante, grado, historial):
     ]
 
     tabla_info = Table(info, colWidths=[120,300])
-
     elementos.append(tabla_info)
 
     elementos.append(Spacer(1,20))
@@ -283,11 +283,9 @@ def generar_pdf(estudiante, grado, historial):
     tabla = Table(data,colWidths=[55,90,70,70,150,140])
 
     tabla.setStyle(TableStyle([
-
         ("GRID",(0,0),(-1,-1),0.5,colors.grey),
         ("BACKGROUND",(0,0),(-1,0),colors.black),
         ("TEXTCOLOR",(0,0),(-1,0),colors.white)
-
     ]))
 
     elementos.append(tabla)
