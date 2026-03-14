@@ -10,22 +10,30 @@ import io
 import base64
 from datetime import date
 
-# -----------------------------
+# ----------------------------------
 # CONFIGURACION SUPABASE
-# -----------------------------
+# ----------------------------------
 
 url = "https://sbxbxksbztvzebybtzxj.supabase.co"
-key = "sb_publishable_AaFkMAv5YaK2AfcZkL5cDg_JgqvWABw"
+key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNieGJ4a3NienR2emVieXRienhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0NDQ1MzUsImV4cCI6MjA4OTAyMDUzNX0.q9Oq5nHrB5DFemGI6ZqCNltD2T1dlPsfMCUc-xki6Ko"
 
 supabase = create_client(url, key)
 
 st.title("Sistema de Convivencia Escolar")
 
-# -----------------------------
+# ----------------------------------
 # CARGAR ESTUDIANTES
-# -----------------------------
+# ----------------------------------
 
-estudiantes = supabase.table("estudiantes").select("*").execute().data
+try:
+    estudiantes = supabase.table("estudiantes").select("*").execute().data
+except:
+    st.error("Error conectando con Supabase")
+    st.stop()
+
+if not estudiantes:
+    st.error("No hay estudiantes registrados")
+    st.stop()
 
 lista_estudiantes = {
     f"{e['estudiante']} ({e['grado']})": e["id"]
@@ -39,11 +47,15 @@ estudiante_nombre = st.selectbox(
 
 estudiante_id = lista_estudiantes[estudiante_nombre]
 
-# -----------------------------
+# ----------------------------------
 # CARGAR FALTAS
-# -----------------------------
+# ----------------------------------
 
 faltas = supabase.table("faltas").select("*").execute().data
+
+if not faltas:
+    st.error("No hay faltas registradas")
+    st.stop()
 
 lista_faltas = {
     f"{f['tipo']} - {f['descripcion']}": f["id"]
@@ -57,15 +69,15 @@ falta_nombre = st.selectbox(
 
 falta_id = lista_faltas[falta_nombre]
 
-# -----------------------------
+# ----------------------------------
 # OBSERVACION
-# -----------------------------
+# ----------------------------------
 
 observacion = st.text_area("Observación")
 
-# -----------------------------
-# FIRMA DEL ESTUDIANTE
-# -----------------------------
+# ----------------------------------
+# FIRMA ESTUDIANTE
+# ----------------------------------
 
 st.subheader("Firma del estudiante")
 
@@ -76,7 +88,7 @@ canvas_result = st_canvas(
     height=150,
     width=400,
     drawing_mode="freedraw",
-    key="firma",
+    key="firma"
 )
 
 firma_base64 = None
@@ -90,9 +102,9 @@ if canvas_result.image_data is not None:
 
     firma_base64 = base64.b64encode(buffer.getvalue()).decode()
 
-# -----------------------------
+# ----------------------------------
 # GUARDAR REPORTE
-# -----------------------------
+# ----------------------------------
 
 if st.button("Guardar reporte"):
 
@@ -108,15 +120,15 @@ if st.button("Guardar reporte"):
 
     st.success("Reporte guardado correctamente")
 
-# -----------------------------
+# ----------------------------------
 # GENERAR PDF
-# -----------------------------
+# ----------------------------------
 
 def generar_pdf():
 
-    historial = supabase.table("reportes")\
-        .select("*")\
-        .eq("estudiante_id", estudiante_id)\
+    historial = supabase.table("reportes") \
+        .select("*") \
+        .eq("estudiante_id", estudiante_id) \
         .execute().data
 
     buffer = io.BytesIO()
@@ -125,12 +137,6 @@ def generar_pdf():
 
     width, height = letter
 
-    # Escudo (si tienes archivo escudo.png)
-    try:
-        pdf.drawImage("escudo.png", 40, height - 100, width=60, height=60)
-    except:
-        pass
-
     # TITULO
 
     pdf.setFont("Helvetica-Bold", 14)
@@ -138,8 +144,8 @@ def generar_pdf():
                    "INSTITUCION EDUCATIVA CIUDAD LA HORMIGA")
 
     pdf.setFont("Helvetica-Bold", 12)
-    pdf.drawString(200, height - 90,
-                   "REPORTE DE SITUACIONES DE CONVIVENCIA")
+    pdf.drawString(180, height - 90,
+                   "REPORTE DE CONVIVENCIA ESCOLAR")
 
     # DATOS ESTUDIANTE
 
@@ -151,17 +157,17 @@ def generar_pdf():
     pdf.drawString(50, height - 150,
                    f"Fecha del reporte: {date.today()}")
 
-    # -----------------------------
+    # ----------------------------------
     # TABLA HISTORIAL
-    # -----------------------------
+    # ----------------------------------
 
     data = [["Fecha", "Tipo", "Descripción", "Observación"]]
 
     for r in historial:
 
-        falta = supabase.table("faltas")\
-            .select("*")\
-            .eq("id", r["falta_id"])\
+        falta = supabase.table("faltas") \
+            .select("*") \
+            .eq("id", r["falta_id"]) \
             .execute().data[0]
 
         data.append([
@@ -171,7 +177,7 @@ def generar_pdf():
             r["observacion"]
         ])
 
-    table = Table(data, colWidths=[70, 60, 180, 180])
+    table = Table(data, colWidths=[70, 70, 200, 180])
 
     style = TableStyle([
 
@@ -187,13 +193,13 @@ def generar_pdf():
 
     table.wrapOn(pdf, width, height)
 
-    table.drawOn(pdf, 50, height - 350)
+    table.drawOn(pdf, 50, height - 380)
 
-    # -----------------------------
+    # ----------------------------------
     # FIRMA ESTUDIANTE
-    # -----------------------------
+    # ----------------------------------
 
-    if historial and historial[0]["firma_estudiante"]:
+    if len(historial) > 0 and historial[0].get("firma_estudiante"):
 
         firma_bytes = base64.b64decode(
             historial[0]["firma_estudiante"]
@@ -202,20 +208,23 @@ def generar_pdf():
         with open("firma_temp.png", "wb") as f:
             f.write(firma_bytes)
 
-        pdf.drawImage("firma_temp.png",
-                      150, 200,
-                      width=200,
-                      height=60)
+        pdf.drawImage(
+            "firma_temp.png",
+            120,
+            200,
+            width=200,
+            height=60
+        )
 
-        pdf.drawString(200, 180, "Firma del estudiante")
+        pdf.drawString(170, 180, "Firma del estudiante")
 
-    # -----------------------------
+    # ----------------------------------
     # FIRMA DOCENTE
-    # -----------------------------
+    # ----------------------------------
 
-    pdf.line(350, 200, 500, 200)
+    pdf.line(360, 200, 520, 200)
 
-    pdf.drawString(390, 180, "Firma del docente")
+    pdf.drawString(400, 180, "Firma del docente")
 
     pdf.save()
 
@@ -223,10 +232,9 @@ def generar_pdf():
 
     return buffer
 
-
-# -----------------------------
+# ----------------------------------
 # BOTON PDF
-# -----------------------------
+# ----------------------------------
 
 if st.button("Generar PDF"):
 
