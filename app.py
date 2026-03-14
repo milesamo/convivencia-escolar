@@ -8,7 +8,7 @@ from supabase import create_client
 SUPABASE_URL = "https://sbxbxksbztvzebybtzxj.supabase.co"
 SUPABASE_KEY = "sb_publishable_AaFkMAv5YaK2AfcZkL5cDg_JgqvWABw"
 
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+#supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # -----------------------------
 # TITULO
