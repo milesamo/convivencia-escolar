@@ -3,33 +3,8 @@ import pandas as pd
 import os
 from datetime import datetime
 from streamlit_drawable_canvas import st_canvas
-
-import streamlit as st
 from supabase import create_client
 
-# conexión a la base de datos
-url = "https://sbxbxksbztvzebybtzxj.supabase.co"
-key = "TU_API_KEY"
-supabase = create_client(url, key)
-
-st.title("Sistema de Convivencia Escolar")
-
-estudiante = st.text_input("Nombre del estudiante")
-grado = st.text_input("Grado")
-fecha = st.date_input("Fecha")
-
-if st.button("Guardar reporte"):
-    data = {
-        "estudiante": estudiante,
-        "grado": grado,
-        "fecha": str(fecha)
-    }
-
-    supabase.table("reportes").insert(data).execute()
-
-    st.success("Reporte guardado")
-
-# PDF
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.pagesizes import letter
@@ -37,6 +12,15 @@ from reportlab.lib.units import cm
 from reportlab.lib import colors
 
 from PIL import Image as PILImage
+
+# ----------------------------
+# CONFIGURACION SUPABASE
+# ----------------------------
+
+url = "https://sbxbxksbztvzebybtzxj.supabase.co"
+key = "sb_publishable_AaFkMAv5YaK2AfcZkL5cDg_JgqvWABw"
+
+supabase = create_client(url, key)
 
 # ----------------------------
 # CONFIGURACION APP
@@ -79,6 +63,7 @@ border-radius:8px;
 
 </style>
 """, unsafe_allow_html=True)
+
 # ----------------------------
 # CREAR CARPETAS
 # ----------------------------
@@ -105,9 +90,11 @@ def cargar_faltas():
 
 
 def cargar_reportes():
-    if os.path.exists("reportes.xlsx"):
-        return pd.read_excel("reportes.xlsx")
-    else:
+
+    try:
+        res = supabase.table("reportes").select("*").execute()
+        return pd.DataFrame(res.data)
+    except:
         return pd.DataFrame(columns=[
             "fecha","grado","estudiante",
             "docente","area","tipo",
@@ -120,7 +107,7 @@ df_faltas = cargar_faltas()
 df_reportes = cargar_reportes()
 
 # ----------------------------
-# ENCABEZADO CON LOGO
+# ENCABEZADO
 # ----------------------------
 
 col1,col2 = st.columns([1,5])
@@ -228,7 +215,7 @@ if st.button("Registrar falta", type="primary"):
 
         img.save(firma_path)
 
-    nuevo = pd.DataFrame([{
+    data = {
 
         "fecha": datetime.now().strftime("%Y-%m-%d"),
         "grado": grado,
@@ -240,13 +227,14 @@ if st.button("Registrar falta", type="primary"):
         "observaciones": observaciones,
         "firma": firma_path
 
-    }])
+    }
 
-    df_reportes = pd.concat([df_reportes, nuevo], ignore_index=True)
+    try:
+        supabase.table("reportes").insert(data).execute()
+        st.success("Falta registrada correctamente")
 
-    df_reportes.to_excel("reportes.xlsx", index=False)
-
-    st.success("Falta registrada correctamente")
+    except:
+        st.error("Error guardando en Supabase")
 
 # ----------------------------
 # GENERAR PDF
