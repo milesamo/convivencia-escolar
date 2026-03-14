@@ -1,190 +1,245 @@
 import streamlit as st
 from supabase import create_client
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
-from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.pagesizes import letter
-from reportlab.lib.units import cm
+from reportlab.pdfgen import canvas
+from reportlab.platypus import Table, TableStyle
 from reportlab.lib import colors
-from datetime import datetime
-import os
+from streamlit_drawable_canvas import st_canvas
+from PIL import Image
+import io
+import base64
+from datetime import date
 
-st.set_page_config(page_title="Convivencia Escolar", layout="wide")
+# -----------------------------
+# CONFIGURACION SUPABASE
+# -----------------------------
+
+url = "TU_URL_SUPABASE"
+key = "TU_PUBLIC_KEY"
+
+supabase = create_client(url, key)
 
 st.title("Sistema de Convivencia Escolar")
 
 # -----------------------------
-# CONEXION SUPABASE
+# CARGAR ESTUDIANTES
 # -----------------------------
 
-supabase = None
+estudiantes = supabase.table("estudiantes").select("*").execute().data
 
-try:
-    SUPABASE_URL = st.secrets["SUPABASE_URL"]
-    SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
+lista_estudiantes = {
+    f"{e['estudiante']} ({e['grado']})": e["id"]
+    for e in estudiantes
+}
 
-    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+estudiante_nombre = st.selectbox(
+    "Seleccionar estudiante",
+    list(lista_estudiantes.keys())
+)
 
-    st.success("Conexión a Supabase establecida correctamente")
-
-except Exception:
-    st.error("Error conectando con Supabase")
+estudiante_id = lista_estudiantes[estudiante_nombre]
 
 # -----------------------------
-# FUNCION GENERAR PDF
+# CARGAR FALTAS
 # -----------------------------
 
-def generar_pdf(nombre, grado, historial):
+faltas = supabase.table("faltas").select("*").execute().data
 
-    archivo = f"reporte_{nombre}.pdf"
+lista_faltas = {
+    f"{f['tipo']} - {f['descripcion']}": f["id"]
+    for f in faltas
+}
 
-    styles = getSampleStyleSheet()
+falta_nombre = st.selectbox(
+    "Tipo de falta",
+    list(lista_faltas.keys())
+)
 
-    elementos = []
+falta_id = lista_faltas[falta_nombre]
 
-    if os.path.exists("escudo.png"):
-        escudo = Image("escudo.png", width=2*cm, height=2*cm)
-    else:
-        escudo = ""
+# -----------------------------
+# OBSERVACION
+# -----------------------------
 
-    titulo = Paragraph(
-        "<b>INSTITUCION EDUCATIVA CIUDAD LA HORMIGA</b>",
-        styles["Title"]
-    )
+observacion = st.text_area("Observación")
 
-    encabezado = Table([[escudo, titulo]])
+# -----------------------------
+# FIRMA DEL ESTUDIANTE
+# -----------------------------
 
-    encabezado.setStyle(TableStyle([
-        ("VALIGN",(0,0),(-1,-1),"MIDDLE")
-    ]))
+st.subheader("Firma del estudiante")
 
-    elementos.append(encabezado)
+canvas_result = st_canvas(
+    stroke_width=2,
+    stroke_color="black",
+    background_color="white",
+    height=150,
+    width=400,
+    drawing_mode="freedraw",
+    key="firma",
+)
 
-    elementos.append(Spacer(1,20))
+firma_base64 = None
 
-    subtitulo = Paragraph(
-        "<b>REPORTE DE SITUACIONES DE CONVIVENCIA</b>",
-        styles["Heading2"]
-    )
+if canvas_result.image_data is not None:
 
-    elementos.append(subtitulo)
+    img = Image.fromarray(canvas_result.image_data.astype("uint8"))
 
-    elementos.append(Spacer(1,20))
+    buffer = io.BytesIO()
+    img.save(buffer, format="PNG")
 
-    fecha = datetime.today().strftime("%d/%m/%Y")
+    firma_base64 = base64.b64encode(buffer.getvalue()).decode()
 
-    info = [
-        ["Nombre del estudiante", nombre],
-        ["Grado", grado],
-        ["Fecha del reporte", fecha]
-    ]
+# -----------------------------
+# GUARDAR REPORTE
+# -----------------------------
 
-    tabla_info = Table(info, colWidths=[200,300])
+if st.button("Guardar reporte"):
 
-    tabla_info.setStyle(TableStyle([
-        ("GRID",(0,0),(-1,-1),1,colors.black)
-    ]))
+    supabase.table("reportes").insert({
 
-    elementos.append(tabla_info)
+        "estudiante_id": estudiante_id,
+        "falta_id": falta_id,
+        "fecha": str(date.today()),
+        "observacion": observacion,
+        "firma_estudiante": firma_base64
 
-    elementos.append(Spacer(1,20))
+    }).execute()
 
-    datos = [["Fecha","Situación","Acción tomada"]]
+    st.success("Reporte guardado correctamente")
 
-    for h in historial:
-        datos.append([h["fecha"], h["situacion"], h["accion"]])
+# -----------------------------
+# GENERAR PDF
+# -----------------------------
 
-    tabla = Table(datos, colWidths=[100,220,180])
+def generar_pdf():
 
-    tabla.setStyle(TableStyle([
-        ("GRID",(0,0),(-1,-1),1,colors.black),
-        ("BACKGROUND",(0,0),(-1,0),colors.lightgrey)
-    ]))
+    historial = supabase.table("reportes")\
+        .select("*")\
+        .eq("estudiante_id", estudiante_id)\
+        .execute().data
 
-    elementos.append(tabla)
+    buffer = io.BytesIO()
 
-    elementos.append(Spacer(1,60))
+    pdf = canvas.Canvas(buffer, pagesize=letter)
 
-    firmas = Table([
-        ["______________________","______________________"],
-        ["Firma del estudiante","Firma del docente"]
+    width, height = letter
+
+    # Escudo (si tienes archivo escudo.png)
+    try:
+        pdf.drawImage("escudo.png", 40, height - 100, width=60, height=60)
+    except:
+        pass
+
+    # TITULO
+
+    pdf.setFont("Helvetica-Bold", 14)
+    pdf.drawString(120, height - 60,
+                   "INSTITUCION EDUCATIVA CIUDAD LA HORMIGA")
+
+    pdf.setFont("Helvetica-Bold", 12)
+    pdf.drawString(200, height - 90,
+                   "REPORTE DE SITUACIONES DE CONVIVENCIA")
+
+    # DATOS ESTUDIANTE
+
+    pdf.setFont("Helvetica", 11)
+
+    pdf.drawString(50, height - 130,
+                   f"Estudiante: {estudiante_nombre}")
+
+    pdf.drawString(50, height - 150,
+                   f"Fecha del reporte: {date.today()}")
+
+    # -----------------------------
+    # TABLA HISTORIAL
+    # -----------------------------
+
+    data = [["Fecha", "Tipo", "Descripción", "Observación"]]
+
+    for r in historial:
+
+        falta = supabase.table("faltas")\
+            .select("*")\
+            .eq("id", r["falta_id"])\
+            .execute().data[0]
+
+        data.append([
+            r["fecha"],
+            falta["tipo"],
+            falta["descripcion"],
+            r["observacion"]
+        ])
+
+    table = Table(data, colWidths=[70, 60, 180, 180])
+
+    style = TableStyle([
+
+        ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
+
+        ("GRID", (0, 0), (-1, -1), 1, colors.black),
+
+        ("FONTSIZE", (0, 0), (-1, -1), 9)
+
     ])
 
-    firmas.setStyle(TableStyle([
-        ("ALIGN",(0,0),(-1,-1),"CENTER")
-    ]))
+    table.setStyle(style)
 
-    elementos.append(firmas)
+    table.wrapOn(pdf, width, height)
 
-    doc = SimpleDocTemplate(archivo, pagesize=letter)
+    table.drawOn(pdf, 50, height - 350)
 
-    doc.build(elementos)
+    # -----------------------------
+    # FIRMA ESTUDIANTE
+    # -----------------------------
 
-    return archivo
+    if historial and historial[0]["firma_estudiante"]:
+
+        firma_bytes = base64.b64decode(
+            historial[0]["firma_estudiante"]
+        )
+
+        with open("firma_temp.png", "wb") as f:
+            f.write(firma_bytes)
+
+        pdf.drawImage("firma_temp.png",
+                      150, 200,
+                      width=200,
+                      height=60)
+
+        pdf.drawString(200, 180, "Firma del estudiante")
+
+    # -----------------------------
+    # FIRMA DOCENTE
+    # -----------------------------
+
+    pdf.line(350, 200, 500, 200)
+
+    pdf.drawString(390, 180, "Firma del docente")
+
+    pdf.save()
+
+    buffer.seek(0)
+
+    return buffer
+
 
 # -----------------------------
-# CONSULTA ESTUDIANTES
+# BOTON PDF
 # -----------------------------
 
-if supabase:
+if st.button("Generar PDF"):
 
-    try:
+    pdf = generar_pdf()
 
-        estudiantes = supabase.table("estudiantes").select("*").execute().data
+    st.download_button(
 
-        if estudiantes:
+        "Descargar reporte PDF",
 
-            nombres = [e["nombre"] for e in estudiantes]
+        pdf,
 
-            estudiante_seleccionado = st.selectbox(
-                "Seleccionar estudiante",
-                nombres
-            )
+        "reporte_convivencia.pdf",
 
-            estudiante = next(
-                e for e in estudiantes if e["nombre"] == estudiante_seleccionado
-            )
+        "application/pdf"
 
-            st.write("Grado:", estudiante["grado"])
-
-            historial_db = supabase.table("convivencia")\
-                .select("*")\
-                .eq("estudiante_id", estudiante["id"])\
-                .execute().data
-
-            historial = []
-
-            for h in historial_db:
-
-                historial.append({
-                    "fecha": h["fecha"],
-                    "situacion": h["situacion"],
-                    "accion": h["accion"]
-                })
-
-            st.subheader("Historial")
-
-            st.dataframe(historial_db)
-
-            if st.button("Generar reporte PDF"):
-
-                pdf = generar_pdf(
-                    estudiante["nombre"],
-                    estudiante["grado"],
-                    historial
-                )
-
-                with open(pdf, "rb") as file:
-
-                    st.download_button(
-                        "Descargar reporte",
-                        file,
-                        file_name=pdf
-                    )
-
-        else:
-
-            st.warning("No hay estudiantes registrados")
-
-    except Exception as e:
-
-        st.error("Error consultando datos")
+    )
